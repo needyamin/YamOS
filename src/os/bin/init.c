@@ -28,10 +28,12 @@ typedef struct {
 /* Forward declarations for services */
 static void init_net_task(void *arg);
 static void init_shell_task(void *arg);
+static void init_process_abi_probe_task(void *arg);
 
 static service_t g_services[] = {
     { "net-init", init_net_task,   true, false },
     { "shell",    init_shell_task, true, false },
+    { "proc-abi", init_process_abi_probe_task, true, false },
 };
 
 /* ---- Service implementations ---- */
@@ -55,6 +57,35 @@ static void init_shell_task(void *arg) {
             "Type 'help' for available commands.\n\n"
             "\033[1;34mroot@yamkernel\033[0m:\033[1;33m/\033[0m$ ";
         vtty_write(i, banner, strlen(banner));
+    }
+}
+
+static void init_process_abi_probe_task(void *arg) {
+    (void)arg;
+    const char *argv[] = { "/bin/exec-test", NULL };
+    const char *envp[] = {
+        "PATH=/bin:/usr/local/bin:/opt/yamos/packages:/home/root/bin",
+        NULL
+    };
+    kprintf_color(0xFF00DDFF, "[INIT] Running process ABI probe: /bin/exec-test\n");
+    i64 pid = elf_spawn_resolved_argv_envp("/bin/exec-test", 1, argv, envp);
+    if (pid < 0) {
+        kprintf_color(0xFFFF3333,
+                      "[INIT] Process ABI probe spawn failed: /bin/exec-test\n");
+        return;
+    }
+
+    i32 status = 0;
+    i64 reaped = sched_waitpid(pid, &status, 0);
+    int exit_code = (status >> 8) & 0xFF;
+    if (reaped == pid && exit_code == 0) {
+        kprintf_color(0xFF00FF88,
+                      "[INIT] Process ABI probe PASS pid=%ld status=0x%x\n",
+                      pid, status);
+    } else {
+        kprintf_color(0xFFFF3333,
+                      "[INIT] Process ABI probe FAIL pid=%ld reaped=%ld status=0x%x exit=%d\n",
+                      pid, reaped, status, exit_code);
     }
 }
 

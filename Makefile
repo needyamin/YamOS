@@ -318,7 +318,7 @@ verify-log: $(KERNEL_ISO) $(DISK_IMG)
 		-no-reboot \
 		-no-shutdown >/dev/null 2>&1 || true
 	@echo "[VERIFY] Key boot evidence:"
-	@grep -E "\[INIT\]|\[ELF\]|\[WAYLAND\]|\[WL_DBG\]|\[EXC\]|\[PCI\]|\[DRIVER\]|\[BLOCK\]|\[VBLK\]|\[VFS\]|\[FAT32\]|\[e1000\]|\[DHCP\]|\[DNS\]|\[TCP\]|\[HTTP\]|PANIC|EXCEPTION|FAULT" build/verify.log | tail -n 260 || true
+	@grep -E "\[INIT\]|\[ELF\]|\[EXEC_TEST\]|\[HELLO_EXEC\]|\[WAYLAND\]|\[WL_DBG\]|\[EXC\]|\[PCI\]|\[DRIVER\]|\[BLOCK\]|\[VBLK\]|\[VFS\]|\[FAT32\]|\[e1000\]|\[DHCP\]|\[DNS\]|\[TCP\]|\[HTTP\]|PANIC|EXCEPTION|FAULT" build/verify.log | tail -n 260 || true
 
 # ============================================================================
 #  Setup (install dependencies on Debian/Ubuntu/WSL)

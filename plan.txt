@@ -11,9 +11,11 @@ and the next steps that make YamOS feel powerful in current years.
 Local verification status:
 The normal verify path is available in this session. On 2026-05-09,
 `powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify` built the
-kernel/ISO and bounded QEMU boot reached userspace. The remaining gap is not
-basic compilation; it is runtime proof for /bin/exec-test behavior and
-orphan/deferred cleanup counters under targeted task-exit scenarios.
+kernel/ISO and bounded QEMU boot reached userspace. The init-time
+/bin/exec-test process ABI probe now proves failed exec return, same-PID
+replacement, cwd preservation, fd inheritance, and FD_CLOEXEC closure. The
+remaining runtime proof gap is orphan/deferred cleanup counters under targeted
+task-exit scenarios.
 
 Core rule
 ---------
@@ -31,11 +33,11 @@ What the investigation found
    main ELF plus interpreter, builds argv/envp/auxv, seeds brk, switches pml4,
    and jumps into user mode.
 
-2. The exec path is powerful but not fully proven.
-   The current slice compiles and boots to userspace, but still needs targeted
-   exec-test and failure-path testing. The code should prove that success never
-   returns, failure keeps the old process alive, PID/cwd/fd table behavior is
-   preserved correctly, and old mappings are released safely.
+2. The exec path is now boot-probed for the core static contract.
+   The init-time /bin/exec-test probe proves failed exec returns and the old
+   process continues, successful exec keeps the same PID, cwd survives, normal
+   fds survive, and FD_CLOEXEC fds close. Remaining work is stress coverage,
+   old-mapping counter proof, and dynamic-loader/TLS behavior.
 
 3. Dynamic linking is still shallow.
    The loader path has auxv and PT_INTERP structure, but relocation support is
@@ -121,8 +123,8 @@ Exit criteria:
 - Boot reaches userspace.
 - /bin/hello still runs.
 - /bin/exec-test is present in initrd.
-Status: achieved for basic bounded boot on 2026-05-09; targeted exec/orphan
-runtime assertions remain in later gates.
+Status: achieved for bounded boot and the static exec process-ABI probe on
+2026-05-09; targeted orphan runtime assertions remain in later gates.
 
 Gate 1: Process lifetime closure
 --------------------------------
@@ -180,12 +182,15 @@ Turn execve from "first implementation" into a kernel contract that tests can
 trust.
 
 Tasks:
-- Verify static execve: /bin/exec-test calls execve("/bin/hello").
+- Verify static execve: /bin/exec-test calls execve("/bin/hello"). Status:
+  init-time boot probe passes.
 - Confirm exec success preserves PID and parent relation but replaces the image.
+  Status: same-PID replacement passes in the boot probe.
 - Confirm exec failure returns -1 and the caller continues in the old image.
-- Confirm cwd survives exec.
-- Confirm non-CLOEXEC fds survive exec.
-- Confirm FD_CLOEXEC fds close on exec.
+  Status: missing-path exec failure passes in the boot probe.
+- Confirm cwd survives exec. Status: boot probe passes with /tmp.
+- Confirm non-CLOEXEC fds survive exec. Status: boot probe passes.
+- Confirm FD_CLOEXEC fds close on exec. Status: boot probe passes.
 - Confirm signal handlers and pending signals reset according to YamOS rules.
 - Confirm brk starts after the new image, not the old one.
 - Confirm old pml4 and old VMAs are destroyed after the new address space is
@@ -293,8 +298,8 @@ Immediate next implementation order
 
 1. Keep the current verify path green:
    powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify
-2. Boot-run /bin/exec-test and capture whether exec succeeds, preserves PID/cwd,
-   and honors FD_CLOEXEC.
+2. Keep the init-time /bin/exec-test process ABI probe green; it now verifies
+   failed exec, same-PID replacement, cwd, fd inheritance, and FD_CLOEXEC.
 3. Boot-run the terminal `sched` command before and after /bin/exec-test or a
    fork/exec/wait loop and confirm cleanup counters move as expected.
 4. Stress the source-level process lifetime cleanup just added:

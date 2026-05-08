@@ -13,8 +13,9 @@ Build: wsl -d Ubuntu -- bash -lc "cd /mnt/c/laragon/www/YamOS && make iso"
 Verify: powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify
 Artifacts: build/yamkernel.iso  |  build/verify.log
 Current verification: this session's verify path works through WSL Ubuntu. The
-latest verify built the ISO and bounded-QEMU boot reached userspace; deeper
-exec-test/orphan-counter runtime checks are still pending.
+latest verify built the ISO, bounded-QEMU boot reached userspace, and the
+init-time /bin/exec-test process ABI probe passed; orphan-counter runtime checks
+are still pending.
 
 Rules
 -----
@@ -39,10 +40,11 @@ Current capability (summary - detail drifts; verify in tree)
   of persistent dirs when vd0 present, e1000 + DHCP/DNS/TCP/HTTP.
 - TLS: store bootstrap + ClientHello probe; full HTTPS handshake not done.
 - execve foundation in progress: SYS_EXECVE routes to elf_exec_resolved_argv_envp,
-  static ELF exec works in source, PT_INTERP exec maps main+interpreter, builds
-  auxv stack, and enters via enter_user_mode_ldso. Basic build/boot now passes;
-  needs targeted exec assertions, more relocations, TLS program-header support,
-  and real dynamic-linker tests.
+  static ELF exec works in source and now has an init-time /bin/exec-test probe
+  for failed exec, same-PID replacement, cwd preservation, fd inheritance, and
+  FD_CLOEXEC. PT_INTERP exec maps main+interpreter, builds auxv stack, and
+  enters via enter_user_mode_ldso. Still needs more relocations, TLS
+  program-header support, and real dynamic-linker tests.
 - Process/memory cleanup improved: vmm_destroy_user_pml4 walks full user page
   tables and uses pmm_page_unref for mapped pages; execve frees replaced pml4.
   task_t has per-process brk_start/brk_current; spawn/exec seed brk from ELF end;

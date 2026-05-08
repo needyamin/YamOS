@@ -42,12 +42,12 @@ syscall_entry:
     sub   rsp, 8                    ; keep SysV 16-byte alignment before call
 
     ; Publish syscall frame slot pointers for signal delivery (offsets match layout below).
-    lea   rax, [rsp+112]
-    mov   [gs:56], rax
-    lea   rax, [rsp+120]
-    mov   [gs:64], rax
-    lea   rax, [rsp+48]
-    mov   [gs:72], rax
+    lea   rbx, [rsp+112]
+    mov   [gs:56], rbx
+    lea   rbx, [rsp+120]
+    mov   [gs:64], rbx
+    lea   rbx, [rsp+48]
+    mov   [gs:72], rbx
 
     ; Shift caller args into SysV positions (right-to-left to avoid clobber):
     mov   r9,  r8                   ; arg6 = a5

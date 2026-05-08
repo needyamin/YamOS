@@ -179,7 +179,7 @@ src/os/services/          compositor and OS services
 
 ## Runtime Notes
 
-- Current verification command: `powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify`. The latest local run built `build/yamkernel.iso` and bounded-QEMU boot reached userspace, mounted VFS/FAT32 paths, initialized e1000 DHCP, registered `/bin/exec-test`, and reached compositor heartbeat. This is a smoke test; targeted exec/orphan cleanup runtime assertions are still pending.
+- Current verification command: `powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify`. The latest local run built `build/yamkernel.iso`, bounded-QEMU boot reached userspace, mounted VFS/FAT32 paths, initialized e1000 DHCP, ran the init-time `/bin/exec-test` process ABI probe, and reached compositor heartbeat. Orphan cleanup counter assertions are still pending.
 - Safe Mode skips several driver/subsystem init paths for easier boot triage.
 - `YAM_PREEMPTIVE` and `YAM_WAYLAND` are enabled in `src/kernel/main.c`.
 - `YAM_DEMO_TASKS` is disabled by default.
@@ -199,7 +199,7 @@ src/os/services/          compositor and OS services
 - `open(path, O_CREAT | O_EXCL, ...)` now fails if the path already exists, enabling basic lock-file and exclusive-create patterns.
 - QEMU runs attach `build/yamos-fat32.disk` as `vd0`; YamOS auto-mounts FAT32-compatible virtio disks at `/mnt/vd0`, exposes mounted volumes in `/mnt`, and promotes `/home`, `/var`, and `/usr/local` to the FAT32 disk when available.
 - The `/bin/hello` boot probe now validates the public app process path by spawning another `hello` from Ring 3 and reaping it through libc `waitpid()`.
-- First `execve` work is in tree: `SYS_EXECVE` routes to the ELF loader, static process replacement exists, PT_INTERP maps a main ELF plus interpreter, argv/envp/auxv stack setup exists, replaced address spaces are destroyed, and FD_CLOEXEC descriptors are closed on exec. It still needs targeted boot assertions for same PID, cwd, fd inheritance, failure behavior, and dynamic-loader/TLS details.
+- First `execve` work is in tree: `SYS_EXECVE` routes to the ELF loader, static process replacement exists, PT_INTERP maps a main ELF plus interpreter, argv/envp/auxv stack setup exists, replaced address spaces are destroyed, and FD_CLOEXEC descriptors are closed on exec. The init-time `/bin/exec-test` probe now verifies missing-path failure return, same-PID replacement, cwd preservation, fd inheritance, and FD_CLOEXEC closure. Dynamic-loader/TLS details still need focused tests.
 - Process lifetime cleanup now frees reaped child fd tables, VMA metadata, non-shared pml4s, FPU state, kernel stacks, YamGraph task nodes, and task objects. Forked tasks clone VMA metadata and get their own YamGraph nodes. Parentless dead tasks can be queued for deferred cleanup, and forced-dead runqueue tasks are cleaned instead of only decrementing counters. Shared thread address spaces are retained conservatively until full thread-group teardown exists.
 - AP cores are initialized and can receive kernel IPIs, but full multi-core task scheduling remains disabled until address-space switching and run-queue ownership are audited.
 - TSC-deadline is detected when the CPU exposes it. The current timer path still uses the calibrated periodic APIC timer unless a later platform-specific timer switch is added.
@@ -207,9 +207,9 @@ src/os/services/          compositor and OS services
 - Phase 2 (Performance & Hardware Foundation) complete: The storage stack has been refactored from monolithic memory mapping to a page-based LRU block cache, and the display stack now supports hardware-accelerated 2D damage tracking and runtime resolution modesetting.
 - Phase 3 (Connected Ecosystem) in progress:
   - **Non-blocking socket ABI complete** — `SOCK_NONBLOCK`, `fcntl(F_SETFL/F_GETFL)` (SYS_FCNTL=93), and `select()` (SYS_SELECT=92) are live. TCP `connect`/`recv`/`accept` return `EAGAIN`/`EINPROGRESS` when non-blocking. Userland `fd_set` (128-bit, 2×u64) and `FD_ZERO/SET/CLR/ISSET` macros in `libc/sys/socket.h`.
-  - **Process ABI hardening in progress** — first `execve`, PT_INTERP loading, FD_CLOEXEC, per-task `brk`, task cleanup counters, kernel-stack freeing, fork VMA metadata cloning, and deferred orphan cleanup are in source and pass basic build/boot smoke verification.
+  - **Process ABI hardening in progress** — first `execve`, PT_INTERP loading, FD_CLOEXEC, per-task `brk`, task cleanup counters, kernel-stack freeing, fork VMA metadata cloning, and deferred orphan cleanup are in source. Static exec now has an init-time verify probe for failed exec, same-PID replacement, cwd, fd inheritance, and FD_CLOEXEC.
   - **Multi-user file manager** — File Manager opens in `/home/<current_user>`, resolved from the compositor session at launch. Home dirs (`/home/<username>`) are created by `sys_mkdir` automatically at first-boot setup, skip-setup, and at every successful login.
-  - Next: Targeted `/bin/exec-test` assertions, orphan cleanup counter tests, thread-group teardown, PT_TLS/dynamic-loader smoke tests, full TLS/HTTPS handshake, and ypkg package manager.
+  - Next: Orphan cleanup counter tests, thread-group teardown, PT_TLS/dynamic-loader smoke tests, full TLS/HTTPS handshake, and ypkg package manager.
 
 ## Documentation
 
