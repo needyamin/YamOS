@@ -13,9 +13,10 @@ The normal verify path is available in this session. On 2026-05-09,
 `powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify` built the
 kernel/ISO and bounded QEMU boot reached userspace. The init-time
 /bin/exec-test process ABI probe now proves failed exec return, same-PID
-replacement, cwd preservation, fd inheritance, and FD_CLOEXEC closure. The
-remaining runtime proof gap is orphan/deferred cleanup counters under targeted
-task-exit scenarios.
+replacement, cwd preservation, fd inheritance, and FD_CLOEXEC closure. Init now
+runs /bin/orphan-test after exec-test (single boot-probes task) and asserts
+orphans_detached and detached_reaped counters advance when the parent exits
+without waitpid.
 
 Core rule
 ---------
@@ -123,8 +124,8 @@ Exit criteria:
 - Boot reaches userspace.
 - /bin/hello still runs.
 - /bin/exec-test is present in initrd.
-Status: achieved for bounded boot and the static exec process-ABI probe on
-2026-05-09; targeted orphan runtime assertions remain in later gates.
+Status: achieved for bounded boot, exec ABI probe, and orphan-counter deltas on
+2026-05-09 via init's orphan-test probe.
 
 Gate 1: Process lifetime closure
 --------------------------------

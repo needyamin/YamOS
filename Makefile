@@ -75,6 +75,7 @@ WALLPAPER_BIN := $(BUILD_DIR)/wallpaper.bin
 AUTHD_ELF   := $(BUILD_DIR)/authd.elf
 HELLO_ELF   := $(BUILD_DIR)/hello.elf
 EXEC_TEST_ELF := $(BUILD_DIR)/exec-test.elf
+ORPHAN_TEST_ELF := $(BUILD_DIR)/orphan-test.elf
 # User-space libc
 LIBC_DIR := src/os/lib/libc
 LIBC_SRCS := $(LIBC_DIR)/stdio.c $(LIBC_DIR)/stdlib.c $(LIBC_DIR)/string.c $(LIBC_DIR)/ctype.c $(LIBC_DIR)/posix.c $(LIBC_DIR)/time.c $(LIBC_DIR)/wchar.c $(LIBC_DIR)/pthread.c $(LIBC_DIR)/signal.c
@@ -159,6 +160,11 @@ $(EXEC_TEST_ELF): src/os/apps/exec_test.c src/os/apps/user.ld $(LIBC_OBJS)
 	$(CC) $(USER_CFLAGS) -nostdlib -Wl,-T,src/os/apps/user.ld -o $@ src/os/apps/exec_test.c $(LIBC_OBJS)
 	@echo "[APP]  $@"
 
+$(ORPHAN_TEST_ELF): src/os/apps/orphan_test.c src/os/apps/user.ld $(LIBC_OBJS)
+	@mkdir -p $(dir $@)
+	$(CC) $(USER_CFLAGS) -nostdlib -Wl,-T,src/os/apps/user.ld -o $@ src/os/apps/orphan_test.c $(LIBC_OBJS)
+	@echo "[APP]  $@"
+
 $(DISK_IMG):
 	@mkdir -p $(dir $@)
 	truncate -s 32M $@
@@ -175,7 +181,7 @@ $(DISK_IMG):
 #  ISO Creation (Limine-based bootable ISO)
 # ============================================================================
 
-$(KERNEL_ISO): $(KERNEL_ELF) $(LOGO_BIN) $(WALLPAPER_BIN) $(AUTHD_ELF) $(HELLO_ELF) $(EXEC_TEST_ELF)
+$(KERNEL_ISO): $(KERNEL_ELF) $(LOGO_BIN) $(WALLPAPER_BIN) $(AUTHD_ELF) $(HELLO_ELF) $(EXEC_TEST_ELF) $(ORPHAN_TEST_ELF)
 	@echo "[ISO]  Building bootable ISO..."
 	@rm -rf $(ISO_DIR)
 	@mkdir -p $(ISO_DIR)/boot/limine
@@ -189,6 +195,7 @@ $(KERNEL_ISO): $(KERNEL_ELF) $(LOGO_BIN) $(WALLPAPER_BIN) $(AUTHD_ELF) $(HELLO_E
 	cp $(AUTHD_ELF) $(ISO_DIR)/boot/authd.elf
 	cp $(HELLO_ELF) $(ISO_DIR)/boot/hello.elf
 	cp $(EXEC_TEST_ELF) $(ISO_DIR)/boot/exec-test.elf
+	cp $(ORPHAN_TEST_ELF) $(ISO_DIR)/boot/orphan-test.elf
 	
 	# Copy limine config
 	cp limine.conf $(ISO_DIR)/boot/limine/limine.conf
@@ -318,7 +325,7 @@ verify-log: $(KERNEL_ISO) $(DISK_IMG)
 		-no-reboot \
 		-no-shutdown >/dev/null 2>&1 || true
 	@echo "[VERIFY] Key boot evidence:"
-	@grep -E "\[INIT\]|\[ELF\]|\[EXEC_TEST\]|\[HELLO_EXEC\]|\[WAYLAND\]|\[WL_DBG\]|\[EXC\]|\[PCI\]|\[DRIVER\]|\[BLOCK\]|\[VBLK\]|\[VFS\]|\[FAT32\]|\[e1000\]|\[DHCP\]|\[DNS\]|\[TCP\]|\[HTTP\]|PANIC|EXCEPTION|FAULT" build/verify.log | tail -n 260 || true
+	@grep -E "\[INIT\]|\[ELF\]|\[EXEC_TEST\]|\[HELLO_EXEC\]|\[ORPHAN_TEST\]|\[WAYLAND\]|\[WL_DBG\]|\[EXC\]|\[PCI\]|\[DRIVER\]|\[BLOCK\]|\[VBLK\]|\[VFS\]|\[FAT32\]|\[e1000\]|\[DHCP\]|\[DNS\]|\[TCP\]|\[HTTP\]|PANIC|EXCEPTION|FAULT" build/verify.log | tail -n 260 || true
 
 # ============================================================================
 #  Setup (install dependencies on Debian/Ubuntu/WSL)

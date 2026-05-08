@@ -17,6 +17,9 @@ extern void devfs_init(void);
 extern void vtty_write(int id, const char *s, usize len);
 extern int  g_active_vtty;
 
+extern void *g_orphan_test_module;
+extern usize g_orphan_test_module_size;
+
 /* ---- Service table ---- */
 typedef struct {
     const char *name;
@@ -29,11 +32,13 @@ typedef struct {
 static void init_net_task(void *arg);
 static void init_shell_task(void *arg);
 static void init_process_abi_probe_task(void *arg);
+static void init_orphan_cleanup_probe_task(void *arg);
+static void init_boot_probes_task(void *arg);
 
 static service_t g_services[] = {
     { "net-init", init_net_task,   true, false },
     { "shell",    init_shell_task, true, false },
-    { "proc-abi", init_process_abi_probe_task, true, false },
+    { "boot-probes", init_boot_probes_task, true, false },
 };
 
 /* ---- Service implementations ---- */
@@ -86,6 +91,65 @@ static void init_process_abi_probe_task(void *arg) {
         kprintf_color(0xFFFF3333,
                       "[INIT] Process ABI probe FAIL pid=%ld reaped=%ld status=0x%x exit=%d\n",
                       pid, reaped, status, exit_code);
+    }
+}
+
+static void init_boot_probes_task(void *arg) {
+    init_process_abi_probe_task(arg);
+    init_orphan_cleanup_probe_task(arg);
+}
+
+static void init_orphan_cleanup_probe_task(void *arg) {
+    (void)arg;
+    sched_info_t before, after;
+
+    if (!g_orphan_test_module) {
+        kprintf_color(0xFFFFAA44,
+                      "[INIT] Orphan cleanup probe SKIP (no orphan-test boot module)\n");
+        return;
+    }
+
+    initrd_register("/bin/orphan-test", g_orphan_test_module,
+                    g_orphan_test_module_size, false);
+    kprintf_color(0xFF00FF88,
+                  "[INIT] Registered /bin/orphan-test from boot module (%lu bytes)\n",
+                  (u64)g_orphan_test_module_size);
+
+    const char *argv[] = { "/bin/orphan-test", NULL };
+    const char *envp[] = {
+        "PATH=/bin:/usr/local/bin:/opt/yamos/packages:/home/root/bin",
+        NULL,
+    };
+
+    sched_get_info(&before);
+
+    kprintf_color(0xFF00DDFF, "[INIT] Running orphan cleanup probe: /bin/orphan-test\n");
+    i64 pid = elf_spawn_resolved_argv_envp("/bin/orphan-test", 1, argv, envp);
+    if (pid < 0) {
+        kprintf_color(0xFFFF3333,
+                      "[INIT] Orphan cleanup probe spawn failed: /bin/orphan-test\n");
+        return;
+    }
+
+    i32 status = 0;
+    i64 reaped = sched_waitpid(pid, &status, 0);
+    int exit_code = (status >> 8) & 0xFF;
+
+    sched_get_info(&after);
+
+    u64 d_detach = after.lifetime_orphans_detached - before.lifetime_orphans_detached;
+    u64 d_reap = after.lifetime_detached_tasks_reaped - before.lifetime_detached_tasks_reaped;
+
+    if (reaped == pid && exit_code == 0 && d_detach >= 1 && d_reap >= 1) {
+        kprintf_color(0xFF00FF88,
+                      "[INIT] Orphan cleanup probe PASS pid=%ld status=0x%x "
+                      "orphans_detached+%lu detached_reaped+%lu\n",
+                      pid, status, (u64)d_detach, (u64)d_reap);
+    } else {
+        kprintf_color(0xFFFF3333,
+                      "[INIT] Orphan cleanup probe FAIL pid=%ld reaped=%ld status=0x%x exit=%d "
+                      "orphans_detached+%lu detached_reaped+%lu\n",
+                      pid, reaped, status, exit_code, (u64)d_detach, (u64)d_reap);
     }
 }
 
@@ -143,7 +207,6 @@ void init_task(void *arg) {
                       "[INIT] Registered /bin/exec-test from boot module (%lu bytes)\n",
                       (u64)g_exec_test_module_size);
     }
-
     /* Mount default filesystems */
     kprintf_color(0xFF00DDFF, "[INIT] Mounting filesystems...\n");
     /* initrd is already mounted by vfs_init(), add more here */

@@ -125,6 +125,7 @@ static volatile struct limine_module_request module_request = {
 void *g_authd_module = NULL;  usize g_authd_module_size = 0;
 void *g_hello_module = NULL;  usize g_hello_module_size = 0;
 void *g_exec_test_module = NULL; usize g_exec_test_module_size = 0;
+void *g_orphan_test_module = NULL; usize g_orphan_test_module_size = 0;
 void *g_wallpaper_module = NULL;
 
 /* ============================================================================
@@ -226,6 +227,10 @@ void kernel_main(void) {
                     g_exec_test_module = mod->address;
                     g_exec_test_module_size = mod->size;
                     KINFO("MODULE", "    -> matched EXEC TEST APP @ %p", g_exec_test_module);
+                } else if (strstr(mod->path, "orphan-test.elf")) {
+                    g_orphan_test_module = mod->address;
+                    g_orphan_test_module_size = mod->size;
+                    KINFO("MODULE", "    -> matched ORPHAN TEST APP @ %p", g_orphan_test_module);
                 }
             }
         } else {

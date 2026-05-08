@@ -19,6 +19,7 @@ typedef struct percpu {
     u64 syscall_rip_slot;   /* +56  points to saved user RIP (syscall clobber slot) */
     u64 syscall_rsp_slot;   /* +64  points to saved user RSP slot */
     u64 syscall_rdi_slot;   /* +72  points to saved user RDI slot */
+    u64 syscall_resume_rsp; /* +80  kernel RSP at syscall_entry `call syscall_dispatch` site */
 } percpu_t;
 
 void      percpu_init(u32 cpu_id, u32 apic_id);

@@ -57,9 +57,12 @@ syscall_entry:
     mov   rsi, rdi                  ; arg2 = a1
     mov   rdi, rax                  ; arg1 = nr
 
+    ; Capture before STI: must match RSP after `call syscall_dispatch` returns (alignment slot).
+    mov   [gs:80], rsp
     sti
     call  syscall_dispatch
-    cli                             ; rax = return value, preserved
+syscall_exit_from_dispatch:
+    cli                             ; rax = return value (fork: parent=child pid, child=0)
     add   rsp, 8
 
     pop   r10
@@ -81,5 +84,13 @@ syscall_entry:
     mov   rsp, [gs:32]              ; restore user RSP
     swapgs                          ; GS_BASE = user
     o64 sysret
+
+; Fork child: context_switch ret jumps here with RSP pointing at the resume word (duplicate of
+; syscall_resume_rsp).  Join the normal syscall return path with RAX=0.
+global fork_child_trampoline
+fork_child_trampoline:
+    pop   rsp
+    xor   eax, eax
+    jmp   syscall_exit_from_dispatch
 
 section .note.GNU-stack noalloc noexec nowrite progbits

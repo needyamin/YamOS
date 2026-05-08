@@ -161,7 +161,7 @@ void    sched_enable(void);
 void    sched_start(void) NORETURN;
 
 /* Process management */
-i64     sys_fork(void);
+i64     sys_fork(u64 syscall_resume_rsp);
 i64     sched_waitpid(i64 pid, i32 *status, u32 options);
 void    task_exit(void);
 void    sched_exit_current(i32 code);

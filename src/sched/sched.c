@@ -21,6 +21,7 @@
 
 static kmem_cache_t *task_cache;
 extern void task_trampoline(void);
+extern void fork_child_trampoline(void);
 
 /* Linux-style nice-to-weight mapping (subset) */
 static const u32 nice_to_weight[40] = {
@@ -690,7 +691,44 @@ void sched_sleep_until(u64 deadline_tick) {
 }
 
 /* ---- fork ---- */
-i64 sys_fork(void) {
+
+/* Child must first appear on the run queue with a valid context_switch tail; the duplicated
+ * syscall stack alone is not enough.  Build the same frame shape as sched_spawn, then the
+ * trampoline jumps into syscall_exit_from_dispatch with RAX=0. */
+static bool sched_fork_arm_child(task_t *child, task_t *parent, u64 syscall_resume_rsp) {
+    if (syscall_resume_rsp < (u64)parent->stack ||
+        syscall_resume_rsp > (u64)parent->stack + SCHED_STACK_SIZE) {
+        kprintf("[SCHED] fork: syscall_resume_rsp outside parent stack\n");
+        return false;
+    }
+    u64 resume = (u64)child->stack + (syscall_resume_rsp - (u64)parent->stack);
+    /*
+     * Bootstrap frame must lie strictly BELOW the duplicated syscall_entry snapshot (which
+     * occupies [syscall_resume_rsp, stack_hi)).  Placing it at stack_hi-72 overwrote the
+     * saved user RIP at stack_hi-16 with fork_child_trampoline, so SYSRET faulted in ring 3.
+     */
+    if (syscall_resume_rsp < (u64)parent->stack + 72) {
+        kprintf("[SCHED] fork: syscall_resume_rsp too shallow for bootstrap frame\n");
+        return false;
+    }
+    u64 parent_lo = syscall_resume_rsp - 72;
+    u64 *frame = (u64 *)((u64)child->stack + (parent_lo - (u64)parent->stack));
+
+    frame[0] = 0x202;
+    frame[1] = 0;
+    frame[2] = 0;
+    frame[3] = 0;
+    frame[4] = 0;
+    frame[5] = 0;
+    frame[6] = 0;
+    frame[7] = (u64)fork_child_trampoline;
+    frame[8] = resume;
+
+    child->rsp = (u64)frame;
+    return true;
+}
+
+i64 sys_fork(u64 syscall_resume_rsp) {
     task_t *parent = sched_current();
     if (!parent) return -1;
     if (parent->child_count >= MAX_CHILDREN) return -1;
@@ -765,9 +803,10 @@ i64 sys_fork(void) {
         return -1;
     }
 
-    /* Adjust RSP to point into child's stack */
-    u64 stack_offset = parent->rsp - (u64)parent->stack;
-    child->rsp = (u64)child->stack + stack_offset;
+    if (!sched_fork_arm_child(child, parent, syscall_resume_rsp)) {
+        sched_destroy_task_resources(child, child->pml4 != NULL, false, true);
+        return -1;
+    }
 
     vfs_task_retain_fds(child);
 
@@ -784,7 +823,7 @@ i64 sys_fork(void) {
     lifetime_tasks_created++;
     lifetime_processes_forked++;
 
-    return (i64)child->id;  /* Parent gets child PID; child would get 0 in real impl */
+    return (i64)child->id;
 }
 
 i64 sched_waitpid(i64 pid, i32 *status, u32 options) {

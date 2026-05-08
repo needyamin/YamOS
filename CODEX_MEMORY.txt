@@ -13,9 +13,10 @@ Build: wsl -d Ubuntu -- bash -lc "cd /mnt/c/laragon/www/YamOS && make iso"
 Verify: powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify
 Artifacts: build/yamkernel.iso  |  build/verify.log
 Current verification: this session's verify path works through WSL Ubuntu. The
-latest verify built the ISO, bounded-QEMU boot reached userspace, and the
-init-time /bin/exec-test process ABI probe passed; orphan-counter runtime checks
-are still pending.
+latest verify built the ISO, bounded-QEMU boot reached userspace, the init-time
+/bin/exec-test probe passed, and the boot-probes path ran /bin/orphan-test with
+fork plus parent-exit-without-waitpid while asserting scheduler
+lifetime_orphans_detached / lifetime_detached_tasks_reaped deltas via init.
 
 Rules
 -----
@@ -57,7 +58,11 @@ Current capability (summary - detail drifts; verify in tree)
   exec. Process lifetime cleanup now has vmm_free_kernel_stack(), a centralized
   scheduler task-resource cleanup helper, forked-task VMA metadata cloning, fork
   YamGraph node creation, and waitpid reaping that frees kernel stacks and
-  destroys task YamGraph nodes. This source slice builds and boots to userspace.
+  destroys task YamGraph nodes. Unix fork semantics are exercised end-to-end
+  (parent gets child PID, child syscall returns 0) via syscall_resume_rsp,
+  fork_child_trampoline, and a bootstrap frame placed below the duplicated
+  syscall_entry snapshot so saved user RIP is not clobbered. This slice builds
+  and boots to userspace.
   Scheduler lifetime/cleanup counters are exposed through SYS_SCHED_INFO and the
   compositor terminal `sched` command. Orphan handling now detaches children from
   exiting parents and queues parentless dead tasks for deferred cleanup after

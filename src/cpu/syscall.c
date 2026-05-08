@@ -1209,7 +1209,7 @@ i64 syscall_dispatch(u64 nr, u64 a1, u64 a2, u64 a3, u64 a4, u64 a5) {
     case SYS_POLL:     SYSCALL_RETURN(sys_poll((pollfd_t *)a1, (u32)a2, (i64)a3));
 
     /* v0.3.0 process management */
-    case SYS_FORK:          SYSCALL_RETURN(sys_fork());
+    case SYS_FORK:          SYSCALL_RETURN(sys_fork(this_cpu()->syscall_resume_rsp));
     case SYS_WAITPID:       SYSCALL_RETURN(sys_waitpid_user((i64)a1, a2, (u32)a3));
     case SYS_BRK:           SYSCALL_RETURN(sys_brk(a1));
     case SYS_MPROTECT:      SYSCALL_RETURN(sys_mprotect((void *)a1, (usize)a2, (u32)a3));
