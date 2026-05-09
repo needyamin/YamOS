@@ -3,12 +3,7 @@
 #include "fcntl.h"
 #include "../libyam/syscall.h"
 
-/* Exec ABI probe fork/exec burst count; temporarily 0 because rapid fork +
- * execve(/bin/hello) from exec-test leaves the next kernel ELF spawn stalled on
- * real QEMU/WSL verify once orphan-test loads — bump alongside REL_LOOPS in init.c
- * once scheduler/exec teardown catches early forks cleanly before sibling probes.
- */
-#define EXEC_TEST_FORK_EXEC_LOOPS 0
+#define EXEC_TEST_FORK_EXEC_LOOPS 6
 
 int main(int argc, char **argv, char **envp);
 

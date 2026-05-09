@@ -14,13 +14,12 @@ Verify: powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify
 Artifacts: build/yamkernel.iso  |  build/verify.log
 Current verification: this session's verify path works through WSL Ubuntu. The
 latest verify built the ISO, bounded-QEMU boot reached userspace, and make verify-log
-shows both `[INIT] Process ABI probe PASS ... forked+...` (scheduler deltas when the
-exec-test fork/exec loop macro is non-zero) and `[INIT] Orphan cleanup probe PASS`.
-The fork+execve(/bin/hello) burst inside `/bin/exec-test` is currently compiled out
-(`EXEC_TEST_FORK_EXEC_LOOPS` == 0): when enabled it wedges the next kernel `elf_spawn`
-for `/bin/orphan-test` on QEMU verify until scheduler/exec teardown after fork bursts
-is fixed; `sched_drain_deferred_reaps()` was added for explicit deferred-reap draining
-between probes.
+shows `[INIT] Process ABI probe PASS` including fork/exec loop deltas (`forked+6`)
+together with `[INIT] Orphan cleanup probe PASS`. The fork/exec burst wedge against the
+following ELF spawn was fixed by caching the BSP kernel PML4 pointer at `vmm_init()` and
+using it from `vmm_get_kernel_pml4()` instead of reading CR3 (scheduling could skip
+`mov cr3` when switching to kernel threads while CR3 still pointed at user tables).
+`sched_drain_deferred_reaps()` remains available between probes.
 
 Rules
 -----

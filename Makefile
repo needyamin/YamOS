@@ -311,7 +311,7 @@ run-serial-only: $(KERNEL_ISO) $(DISK_IMG)
 verify-log: $(KERNEL_ISO) $(DISK_IMG)
 	@echo "[VERIFY] Running bounded QEMU boot -> build/verify.log"
 	@rm -f build/verify.log
-	@timeout 90s qemu-system-x86_64 \
+	@timeout 120s qemu-system-x86_64 \
 		-cdrom $(KERNEL_ISO) \
 		-drive file=$(DISK_IMG),format=raw,if=none,id=vd0 \
 		-device virtio-blk-pci,drive=vd0,disable-modern=on \

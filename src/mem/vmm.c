@@ -12,6 +12,12 @@
 
 static u64 g_hhdm_offset = 0;
 static u64 g_next_kernel_stack = 0xFFFFE10000000000ULL;
+/** Canonical kernel page-table root captured once during vmm_init (BSP CR3).
+ * Never derive kernel mappings by reading CR3 during scheduling — CR3 may still
+ * hold a user address space when we're deciding whether to reload CR3 for a
+ * kernel thread whose task_t.pml4 is NULL (fixes wedge after fork/exec bursts).
+ */
+static u64 *g_kernel_pml4 = NULL;
 #define USER_BRK_DEFAULT 0x400000ULL
 
 /* ---- Helpers ---- */
@@ -111,7 +117,12 @@ void vmm_free_kernel_stack(void *stack, usize usable_size) {
 /* ---- Public API ---- */
 void vmm_init(u64 hhdm_offset) {
     g_hhdm_offset = hhdm_offset;
-    kprintf_color(0xFF00FF88, "[VMM] Initialized: HHDM offset = 0x%lx\n", hhdm_offset);
+    u64 pml4_phys;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(pml4_phys));
+    g_kernel_pml4 =
+        (u64 *)vmm_phys_to_virt(pml4_phys & 0x000FFFFFFFFFF000ULL);
+    kprintf_color(0xFF00FF88, "[VMM] Initialized: HHDM offset = 0x%lx\n",
+                  hhdm_offset);
 }
 
 bool vmm_map_page(u64 *pml4, u64 virt, u64 phys, u64 flags) {
@@ -196,8 +207,10 @@ bool vmm_update_flags(u64 *pml4, u64 virt, u64 new_flags) {
 }
 
 u64 *vmm_get_kernel_pml4(void) {
+    if (g_kernel_pml4)
+        return g_kernel_pml4;
     u64 pml4_phys;
-    __asm__ volatile ("mov %%cr3, %0" : "=r"(pml4_phys));
+    __asm__ volatile("mov %%cr3, %0" : "=r"(pml4_phys));
     return (u64 *)vmm_phys_to_virt(pml4_phys & 0x000FFFFFFFFFF000ULL);
 }
 

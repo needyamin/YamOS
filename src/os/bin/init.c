@@ -22,10 +22,8 @@ extern usize g_orphan_test_module_size;
 extern void *g_hello_module;
 extern usize g_hello_module_size;
 
-/* Must match EXEC_TEST_FORK_EXEC_LOOPS in src/os/apps/exec_test.c (non-zero only
- * once fork/exec bursts no longer wedge the following ELF spawn on verify).
- */
-#define EXEC_TEST_FORK_EXEC_REL_LOOPS 0
+/* Must match EXEC_TEST_FORK_EXEC_LOOPS in src/os/apps/exec_test.c */
+#define EXEC_TEST_FORK_EXEC_REL_LOOPS 6
 
 /* ---- Service table ---- */
 typedef struct {
