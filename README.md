@@ -1,19 +1,19 @@
 # YamOS
 
-YamOS is an exceptional x86_64 operating system built around **YamKernel**, a graph-based hybrid kernel. It boots with Limine, brings up a modern kernel core, and layers a small desktop/userland on top of YamGraph, a live resource graph where tasks, memory, devices, files, channels, and capabilities are modeled as connected nodes.
+YamOS is an ambitious x86_64 operating system built around **YamKernel**, a graph-based hybrid kernel. It boots with Limine, brings up a modern kernel core, and layers a small desktop/userland on top of YamGraph, a live resource graph where tasks, memory, devices, files, channels, and capabilities are modeled as connected nodes.
 
-Current tree: **v0.5.0 development line** — Phase 3 (Connected Ecosystem) in progress.
+Current tree: **v0.5.0 development line** — **Phase 3 (Connected Ecosystem)** in progress. (Some in-tree banners or shell strings may still show older version labels until refreshed.)
 
 
-<img width="1920" height="1032" alt="Image" src="https://github.com/user-attachments/assets/dfebb446-79b5-413f-805d-fae61ffc8fdd" />
+<img width="1920" height="1032" alt="YamOS desktop environment screenshot" src="https://github.com/user-attachments/assets/dfebb446-79b5-413f-805d-fae61ffc8fdd" />
 
 
 ## Not Complete Yet
 
 YamOS cannot yet run arbitrary x86_64 Linux/Windows software or install large
-browser engines and language runtimes as-is. These are required foundations:
+browser engines and language runtimes as-is. These are still missing or incomplete for a general-purpose desktop OS:
 
-- persistent root/system volume
+- production-style installed root/system volume (single coherent layout); optional virtio FAT32 can persist `/home`, `/var`, and `/usr/local` when attached
 - full POSIX/Linux syscall compatibility
 - fully proven `execve` semantics and a stronger process/thread model
 - dynamic linker / shared libraries
@@ -81,7 +81,7 @@ signatures, browser-engine storage/sandboxing, and broader hardware drivers.
 
 ## Quick Start
 
-On Ubuntu/WSL:
+On Ubuntu/WSL (same environment **`scripts/test.ps1`** uses on Windows):
 
 ```bash
 make setup
@@ -89,7 +89,9 @@ make iso
 make run
 ```
 
-Useful targets:
+From Windows, `.\scripts\test.ps1` (with `serial`, `headless`, `verify`, or `debug`) runs those Makefile targets inside WSL Ubuntu.
+
+Useful targets (run from the repo in WSL/Linux):
 
 ```bash
 make iso              # Build build/yamkernel.iso
@@ -98,7 +100,7 @@ make run-uefi         # Run QEMU UEFI mode
 make run-serial       # Write serial output to build/serial.log
 make run-serial-only  # Headless serial console
 make debug            # QEMU paused with GDB server on localhost:1234
-make verify-log       # Bounded QEMU serial boot → build/verify.log (same cue strings as test.ps1 verify)
+make verify-log       # Bounded QEMU boot → build/verify.log (needs GNU coreutils `timeout`; same cues as test.ps1 verify)
 make clean
 ```
 
@@ -152,6 +154,7 @@ src/net/                  ARP/IP/ICMP/UDP/TCP/DHCP/DNS stack,
                           non-blocking socket layer, select/poll
 src/drivers/              PCI, USB, input, serial, timer, video, DRM, net
 src/nexus/                YamGraph, channels, capabilities
+src/os/bin/               PID 1 init (`init_task`), boot-time probes wiring
 src/os/apps/              authd, hello, exec-test, orphan-test, user linker script
 src/os/lib/               libc and libyam
 src/os/README.md          OS-layer layout and app-facing structure rules
@@ -176,12 +179,12 @@ src/os/services/          compositor and OS services
 3. The kernel initializes framebuffer, CPU tables, security flags, memory, ACPI/APIC/SMP, HPET/TSC detection, and syscalls.
 4. YamGraph is initialized and core subsystems are registered.
 5. Drivers and subsystems start unless Safe Mode was selected.
-6. Scheduler, cgroups, OOM, power, AI, PID 1 (`init`), **`boot-probes`** (runs `/bin/exec-test` then `/bin/orphan-test` early), and the compositor are spawned.
+6. **Scheduler**, **cgroups**, **OOM**, **power**, and **AI** subsystems are initialized; preemptive ticks run when **`YAM_PREEMPTIVE`** is on. **PID 1 `init`** is spawned (`sched_spawn("init", …)`). With **`YAM_WAYLAND`** enabled, the Wayland compositor task is spawned next; it runs **concurrently** with init (not after probes finish). Init registers `/bin/hello`, **`exec-test`**, and **`orphan-test`** from Limine modules when present, then starts autostart services including **`boot-probes`** (runs `/bin/exec-test` then **`sched_drain_deferred_reaps()`** then `/bin/orphan-test`).
 7. The BSP idle loop yields; AP cores stay initialized and parked.
 
 ## Runtime Notes
 
-- Current verification: `powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify` (runs `make iso` then `make verify-log`). The bounded QEMU boot writes **`build/verify.log`** (`Makefile` uses `timeout` + `-serial file:…`; default guest RAM **256M**). Expect **`[INIT] Process ABI probe PASS`** (fork/exec burst + exec ABI checks + scheduler **`forked+` / `created+` / `reaped+`** deltas) and **`[INIT] Orphan cleanup probe PASS`**. **`sched_drain_deferred_reaps()`** runs between probes from PID 1.
+- Current verification: `powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify` runs **`make iso`** then **`make verify-log`** inside WSL Ubuntu. The bounded QEMU boot writes **`build/verify.log`** (`Makefile`: **`timeout` 120s**, `-serial file:…`, **256M** RAM, **2 CPUs**). Expect **`[INIT] Process ABI probe PASS`** (fork/exec burst + exec ABI checks + scheduler **`forked+` / `created+` / `reaped+`** deltas) and **`[INIT] Orphan cleanup probe PASS`** (**`orphans_detached+`** / **`detached_reaped+`** style deltas). **`sched_drain_deferred_reaps()`** runs between probes from PID 1.
 - **Scheduling + kernel page tables:** `vmm_init()` captures the BSP kernel PML4 once; `vmm_get_kernel_pml4()` returns that snapshot instead of reading CR3, so switching to kernel threads with `task_t.pml4 == NULL` always compares against the real kernel root and reloads CR3 after user tasks (fixes latent wedge after fork/exec bursts before the next `elf_spawn`).
 - Safe Mode skips several driver/subsystem init paths for easier boot triage.
 - `YAM_PREEMPTIVE` and `YAM_WAYLAND` are enabled in `src/kernel/main.c`.
@@ -201,7 +204,7 @@ src/os/services/          compositor and OS services
 - `lseek(fd, 0, SEEK_END)` now uses VFS metadata through `fstat`, so EOF seeking works for initrd, RAMFS, FAT32, and other stat-backed files.
 - `open(path, O_CREAT | O_EXCL, ...)` now fails if the path already exists, enabling basic lock-file and exclusive-create patterns.
 - QEMU runs attach `build/yamos-fat32.disk` as `vd0`; YamOS auto-mounts FAT32-compatible virtio disks at `/mnt/vd0`, exposes mounted volumes in `/mnt`, and promotes `/home`, `/var`, and `/usr/local` to the FAT32 disk when available.
-- The `/bin/hello` boot probe now validates the public app process path by spawning another `hello` from Ring 3 and reaping it through libc `waitpid()`.
+- PID 1 registers **`/bin/hello`** from its Limine module when present (and may install **`/usr/local/bin/hello-local`** on writable roots) but **does not auto-run hello at boot** (stability mode). Ring 3 **`hello`** coverage is exercised by **`/bin/exec-test`** (`fork` / **`execve("/bin/hello")`** / **`waitpid`**) and by the desktop Terminal (`run` / bare **`hello`**).
 - First `execve` work is in tree: `SYS_EXECVE` routes to the ELF loader, static process replacement exists, PT_INTERP maps a main ELF plus interpreter, argv/envp/auxv stack setup exists, replaced address spaces are destroyed, and FD_CLOEXEC descriptors are closed on exec. PID 1 **`boot-probes`** run **`/bin/exec-test`** (missing-path exec, same-PID replacement, cwd, fds, FD_CLOEXEC, fork/exec burst + **`SYS_SCHED_INFO`** deltas) then **`/bin/orphan-test`** (orphan/deferred-reap counters). Dynamic-loader/TLS details still need focused tests.
 - Process lifetime cleanup now frees reaped child fd tables, VMA metadata, non-shared pml4s, FPU state, kernel stacks, YamGraph task nodes, and task objects. Forked tasks clone VMA metadata and get their own YamGraph nodes. Parentless dead tasks can be queued for deferred cleanup, and forced-dead runqueue tasks are cleaned instead of only decrementing counters. Shared thread address spaces are retained conservatively until full thread-group teardown exists.
 - AP cores are initialized and can receive kernel IPIs, but full multi-core task scheduling remains disabled until address-space switching and run-queue ownership are audited.
