@@ -168,8 +168,10 @@ Tasks:
 Exit criteria:
 - Reaping a process releases pml4, VMAs, fds, FPU state, kernel stack, YamGraph
   node, and task object exactly once. Source path implemented; basic build/boot
-  passes, but targeted repeated fork/exec/wait counter verification is still
-  required.
+  passes; init asserts scheduler deltas from `/bin/exec-test` when fork/exec loops are
+  enabled and orphan counters after `/bin/orphan-test`. Full fork+exec burst inside
+  exec-test before orphan-test remains gated behind macros pending a kernel fix for the
+  second `elf_spawn` wedge after fork/exec bursts.
 - Reaping a thread does not destroy the shared process address space. Source
   path now avoids destroying shared pml4/VMA metadata; thread-group semantics
   still need stronger policy.

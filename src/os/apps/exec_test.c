@@ -3,6 +3,13 @@
 #include "fcntl.h"
 #include "../libyam/syscall.h"
 
+/* Exec ABI probe fork/exec burst count; temporarily 0 because rapid fork +
+ * execve(/bin/hello) from exec-test leaves the next kernel ELF spawn stalled on
+ * real QEMU/WSL verify once orphan-test loads — bump alongside REL_LOOPS in init.c
+ * once scheduler/exec teardown catches early forks cleanly before sibling probes.
+ */
+#define EXEC_TEST_FORK_EXEC_LOOPS 0
+
 int main(int argc, char **argv, char **envp);
 
 void _start(int argc, char **argv, char **envp) {
@@ -37,6 +44,35 @@ int main(int argc, char **argv, char **envp) {
     };
 
     printf("[EXEC_TEST] starting pid=%ld\n", (long)getpid());
+
+    printf("[EXEC_TEST] fork/exec: %d loops\n", EXEC_TEST_FORK_EXEC_LOOPS);
+    for (unsigned n = 0; n < EXEC_TEST_FORK_EXEC_LOOPS; n++) {
+        pid_t fpid = fork();
+        if (fpid < 0) {
+            printf("[EXEC_TEST] FAIL fork/exec loop %u fork() -> %ld\n", n,
+                   (long)fpid);
+            return 115;
+        }
+        if (fpid == 0) {
+            char *const hargv[] = { "/bin/hello", NULL };
+            char *const henv[] = { NULL };
+            if (execve("/bin/hello", hargv, henv) < 0) {
+                printf("[EXEC_TEST] FAIL fork/exec loop %u execve child\n", n);
+                _exit(116);
+            }
+            _exit(117);
+        }
+        int fst = 0;
+        pid_t fw = waitpid(fpid, &fst, 0);
+        int fcode = (fst >> 8) & 0xFF;
+        if (fw != fpid || fcode != 0) {
+            printf("[EXEC_TEST] FAIL fork/exec loop %u waitpid=%ld expect=%ld "
+                   "status=0x%x exit=%d\n",
+                   n, (long)fw, (long)fpid, fst, fcode);
+            return 118;
+        }
+    }
+    printf("[EXEC_TEST] fork/exec PASS (%d loops)\n", EXEC_TEST_FORK_EXEC_LOOPS);
 
     char *const bad_argv[] = { "/bin/does-not-exist", NULL };
     int bad_rc = execve("/bin/does-not-exist", bad_argv, next_envp);

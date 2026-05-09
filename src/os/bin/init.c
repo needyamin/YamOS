@@ -19,6 +19,13 @@ extern int  g_active_vtty;
 
 extern void *g_orphan_test_module;
 extern usize g_orphan_test_module_size;
+extern void *g_hello_module;
+extern usize g_hello_module_size;
+
+/* Must match EXEC_TEST_FORK_EXEC_LOOPS in src/os/apps/exec_test.c (non-zero only
+ * once fork/exec bursts no longer wedge the following ELF spawn on verify).
+ */
+#define EXEC_TEST_FORK_EXEC_REL_LOOPS 0
 
 /* ---- Service table ---- */
 typedef struct {
@@ -67,12 +74,24 @@ static void init_shell_task(void *arg) {
 
 static void init_process_abi_probe_task(void *arg) {
     (void)arg;
+    sched_info_t before, after;
+
+    if (!g_hello_module) {
+        kprintf_color(0xFFFFAA44,
+                      "[INIT] Process ABI probe SKIP (no hello boot module)\n");
+        return;
+    }
+
     const char *argv[] = { "/bin/exec-test", NULL };
     const char *envp[] = {
         "PATH=/bin:/usr/local/bin:/opt/yamos/packages:/home/root/bin",
         NULL
     };
-    kprintf_color(0xFF00DDFF, "[INIT] Running process ABI probe: /bin/exec-test\n");
+
+    sched_get_info(&before);
+
+    kprintf_color(0xFF00DDFF,
+                  "[INIT] Running process ABI probe (exec + fork/exec loop): /bin/exec-test\n");
     i64 pid = elf_spawn_resolved_argv_envp("/bin/exec-test", 1, argv, envp);
     if (pid < 0) {
         kprintf_color(0xFFFF3333,
@@ -83,19 +102,37 @@ static void init_process_abi_probe_task(void *arg) {
     i32 status = 0;
     i64 reaped = sched_waitpid(pid, &status, 0);
     int exit_code = (status >> 8) & 0xFF;
-    if (reaped == pid && exit_code == 0) {
+
+    sched_get_info(&after);
+
+    u64 d_fork = after.lifetime_processes_forked - before.lifetime_processes_forked;
+    u64 d_created = after.lifetime_tasks_created - before.lifetime_tasks_created;
+    u64 d_reaped = after.lifetime_tasks_reaped - before.lifetime_tasks_reaped;
+
+    const int need_fe = EXEC_TEST_FORK_EXEC_REL_LOOPS;
+    bool fe_fork_ok =
+        (need_fe == 0) || (d_fork >= (u64)need_fe);
+    bool fe_created_ok = (d_created >= 1 + (u64)need_fe);
+    bool fe_reaped_ok = (d_reaped >= 1 + (u64)need_fe);
+
+    if (reaped == pid && exit_code == 0 && fe_fork_ok && fe_created_ok &&
+        fe_reaped_ok) {
         kprintf_color(0xFF00FF88,
-                      "[INIT] Process ABI probe PASS pid=%ld status=0x%x\n",
-                      pid, status);
+                      "[INIT] Process ABI probe PASS pid=%ld status=0x%x forked+%lu "
+                      "created+%lu reaped+%lu\n",
+                      pid, status, (u64)d_fork, (u64)d_created, (u64)d_reaped);
     } else {
         kprintf_color(0xFFFF3333,
-                      "[INIT] Process ABI probe FAIL pid=%ld reaped=%ld status=0x%x exit=%d\n",
-                      pid, reaped, status, exit_code);
+                      "[INIT] Process ABI probe FAIL pid=%ld reaped=%ld status=0x%x exit=%d "
+                      "forked+%lu created+%lu reaped+%lu\n",
+                      pid, reaped, status, exit_code, (u64)d_fork, (u64)d_created,
+                      (u64)d_reaped);
     }
 }
 
 static void init_boot_probes_task(void *arg) {
     init_process_abi_probe_task(arg);
+    sched_drain_deferred_reaps();
     init_orphan_cleanup_probe_task(arg);
 }
 
@@ -157,8 +194,6 @@ static void init_orphan_cleanup_probe_task(void *arg) {
 
 extern void *g_authd_module;
 extern usize g_authd_module_size;
-extern void *g_hello_module;
-extern usize g_hello_module_size;
 extern void *g_exec_test_module;
 extern usize g_exec_test_module_size;
 

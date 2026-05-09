@@ -13,10 +13,14 @@ Build: wsl -d Ubuntu -- bash -lc "cd /mnt/c/laragon/www/YamOS && make iso"
 Verify: powershell -ExecutionPolicy Bypass -File .\scripts\test.ps1 verify
 Artifacts: build/yamkernel.iso  |  build/verify.log
 Current verification: this session's verify path works through WSL Ubuntu. The
-latest verify built the ISO, bounded-QEMU boot reached userspace, the init-time
-/bin/exec-test probe passed, and the boot-probes path ran /bin/orphan-test with
-fork plus parent-exit-without-waitpid while asserting scheduler
-lifetime_orphans_detached / lifetime_detached_tasks_reaped deltas via init.
+latest verify built the ISO, bounded-QEMU boot reached userspace, and make verify-log
+shows both `[INIT] Process ABI probe PASS ... forked+...` (scheduler deltas when the
+exec-test fork/exec loop macro is non-zero) and `[INIT] Orphan cleanup probe PASS`.
+The fork+execve(/bin/hello) burst inside `/bin/exec-test` is currently compiled out
+(`EXEC_TEST_FORK_EXEC_LOOPS` == 0): when enabled it wedges the next kernel `elf_spawn`
+for `/bin/orphan-test` on QEMU verify until scheduler/exec teardown after fork bursts
+is fixed; `sched_drain_deferred_reaps()` was added for explicit deferred-reap draining
+between probes.
 
 Rules
 -----

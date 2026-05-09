@@ -154,6 +154,7 @@ void    sched_sleep_until(u64 deadline_tick);
 void    sched_init(void);
 task_t *sched_spawn(const char *name, void (*entry)(void *), void *arg, u8 prio);
 void    sched_yield(void);
+void    sched_drain_deferred_reaps(void);
 void    sched_maybe_preempt(void);
 void    sched_tick(void);
 void    sched_install_timer(void);

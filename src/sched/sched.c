@@ -597,6 +597,13 @@ void sched_yield(void) {
     sti();
 }
 
+void sched_drain_deferred_reaps(void) {
+    if (!sched_enabled) return;
+    cli();
+    sched_reap_deferred_dead_tasks();
+    sti();
+}
+
 void sched_maybe_preempt(void) {
     task_t *cur = sched_current();
     if (!sched_enabled || !cur || !cur->need_resched) return;
